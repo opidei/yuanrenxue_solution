@@ -55,21 +55,31 @@ def get_m_and_session(target_id):
     """从浏览器获取 m 参数和 sessionid"""
     # 获取 window.match1
     try:
-        m = urllib.request.urlopen(
+        result = urllib.request.urlopen(
             urllib.request.Request(
                 f"{CDP_URL}/eval?target={target_id}",
                 data=b"window.match1"),
             timeout=5).read().decode().strip()
+        # 解析 JSON 格式的响应
+        try:
+            m = json.loads(result).get('value')
+        except:
+            m = result
     except:
         m = None
 
     # 获取 sessionid
     try:
-        cookie = urllib.request.urlopen(
+        result = urllib.request.urlopen(
             urllib.request.Request(
                 f"{CDP_URL}/eval?target={target_id}",
                 data=b"document.cookie.match(/sessionid=([^;]+)/)[1]"),
             timeout=5).read().decode().strip()
+        # 解析 JSON 格式的响应
+        try:
+            cookie = json.loads(result).get('value')
+        except:
+            cookie = result
     except:
         cookie = None
 
@@ -83,6 +93,26 @@ def api_request(page, m, sessionid):
 
     req = urllib.request.Request(url)
     req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    req.add_header('Referer', 'https://match.yuanrenxue.cn/match/1')
+    req.add_header('Accept', 'application/json, text/javascript, */*; q=0.01')
+    req.add_header('Cookie', f'sessionid={sessionid}')
+
+    try:
+        resp = urllib.request.urlopen(req, timeout=10)
+        return resp.status, resp.read().decode('utf-8')
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode('utf-8')
+    except Exception as e:
+        return 0, str(e)
+
+
+def api_request_page5(page, m, sessionid):
+    """第五页请求: User-Agent为yuanrenxue"""
+    params = urllib.parse.urlencode({'page': page, 'm': m})
+    url = f"https://match.yuanrenxue.cn/api/question/1?{params}"
+
+    req = urllib.request.Request(url)
+    req.add_header('User-Agent', 'yuanrenxue')
     req.add_header('Referer', 'https://match.yuanrenxue.cn/match/1')
     req.add_header('Accept', 'application/json, text/javascript, */*; q=0.01')
     req.add_header('Cookie', f'sessionid={sessionid}')
@@ -166,6 +196,21 @@ def main():
             print(f"  Page {page}: 错误 - {e}")
 
         time.sleep(0.3)
+
+    # 获取第5页
+    print("\n获取第5页数据...")
+    status, response = api_request_page5(5, m, sessionid)
+    try:
+        data = json.loads(response)
+        items = data.get('data', [])
+
+        if items and all(isinstance(x, int) for x in items):
+            print(f"  Page 5: {items}")
+            all_numbers.extend(items)
+        else:
+            print(f"  Page 5: {response[:100]}")
+    except Exception as e:
+        print(f"  Page 5: 错误 - {e}")
 
     # 输出结果
     if all_numbers:
